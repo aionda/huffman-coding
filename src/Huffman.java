@@ -24,8 +24,8 @@ import java.io.*;
 import java.util.*;
 
 public class Huffman {
-	public static final char EOF = (char) 254;
-	public static final char DELIMITER = (char) 255;
+	public static final char EOF = (char) 253;
+	public static final char DELIMITER = (char) 254;
 
 	public static class Node implements Comparator<Node> {
 		public char ch;
@@ -54,29 +54,37 @@ public class Huffman {
 	}
 
 	// ENCODE
-	public static void encode(String filename) throws IOException {
-		BufferedReader br = new BufferedReader(new FileReader(filename));
-		String str = br.readLine();
-		br.close();
+	public static void encode(String in_file, String out_file, String table_file)
+			throws IOException {
+		BufferedReader br = new BufferedReader(new FileReader(in_file));
+		char[] input_arr = new char[4096];
+		StringBuilder input = new StringBuilder();
 		HashMap<Character, Integer> map = new HashMap<Character, Integer>();
-		// storing frequency of each character in a HashMap
-		char ch;
-		for (int i = 0; i < str.length(); i++) {
-			ch = str.charAt(i);
-			if (map.containsKey(ch)) {
-				map.put(ch, map.get(ch) + 1);
-			} else {
-				map.put(ch, 1);
+		int length;
+		while ((length = br.read(input_arr)) != -1) {
+			input = new StringBuilder();
+			input.append(input_arr);
+
+			// storing frequency of each character in a HashMap
+			char ch;
+			for (int i = 0; i < input.length(); i++) {
+				ch = input.charAt(i);
+				if (map.containsKey(ch)) {
+					map.put(ch, map.get(ch) + 1);
+				} else {
+					map.put(ch, 1);
+				}
 			}
 		}
+		br.close();
 		map.put(EOF, 1);
 
 		// debug
-//		System.out.println("printing the frequency of each character");
-//		for (Map.Entry<Character, Integer> entry : map.entrySet()) {
-//			System.out.println(entry.getKey() + " " + entry.getValue());
-//		}
-//		System.out.println();
+		// System.out.println("printing the frequency of each character");
+		// for (Map.Entry<Character, Integer> entry : map.entrySet()) {
+		// System.out.println(entry.getKey() + " " + entry.getValue());
+		// }
+		// System.out.println();
 
 		// create min heap of Nodes
 		PriorityQueue<Node> queue = new PriorityQueue<Node>(map.size(),
@@ -104,47 +112,63 @@ public class Huffman {
 		traverse(tree, s, encoding);
 
 		// debug
-//		System.out.println("printing out encoding table");
-//		for (Map.Entry<Character, String> entry : encoding.entrySet()) {
-//			System.out.println(entry.getKey() + " " + entry.getValue());
-//		}
-//		System.out.println();
+		// System.out.println("printing out encoding table");
+		// for (Map.Entry<Character, String> entry : encoding.entrySet()) {
+		// System.out.println(entry.getKey() + " " + entry.getValue());
+		// }
+		// System.out.println();
 
 		// look up encoding for each character and convert to byte
 		StringBuilder sb = new StringBuilder();
-		// debug
-//		System.out.println("printing out each encoding");
-		for (int i = 0; i < str.length(); i++) {
-			sb.append(encoding.get(str.charAt(i)));
+		FileOutputStream out = new FileOutputStream(out_file);
+		byte[] output = null;
+
+		br = new BufferedReader(new FileReader(in_file));
+		while ((length = br.read(input_arr)) != -1) {
+			System.out.println("LENGHT=" + length);
+			input = new StringBuilder();
+			sb = new StringBuilder();
+			input.append(input_arr, 0, length);
 			// debug
-//			System.out.println(str.charAt(i) + " "
-//					+ encoding.get(str.charAt(i)));
-		}
-		// debug
-//		System.out.println();
-		sb.append(encoding.get(EOF));
+			// System.out.println("printing out each encoding");
+			for (int i = 0; i < input.length(); i++) {
+				sb.append(encoding.get(input.charAt(i)) + "");
+				// debug
+				// System.out.println(str.charAt(i) + " "
+				// + encoding.get(str.charAt(i)));
+			}
+			// debug
+			// System.out.println();
+			if (length < 4096 && length % 8 != 0) {
+				System.out.println("EOF=" + encoding.get(EOF));
+				sb.append(encoding.get(EOF));
+				System.out.println("in here");
+				while (sb.length() % 8 != 0) {
+					sb.append('0');
+					System.out.println("in in here, length=" + sb.length());
+				}
+				
+				
+			}
 
+			output = new byte[(int) Math.ceil(sb.length() / 8.0)];
+			// converting string to bytes
+			for (int i = 0; i < (sb.length() - 8); i = i + 8) {
+				output[i / 8] = (byte) Integer.parseInt(sb.substring(i, i + 8),
+						2);
+			}
+
+			out.write(output);
+		}
+		br.close();
 		// pad string
-		while (!(sb.length() % 8 == 0)) {
-			sb.append('0');
-		}
 
 		// debug
-//		System.out.println("testing out output");
-//		System.out.println(sb);
-
-		byte[] output = new byte[(int) Math.ceil(sb.length() / 8.0)];
-		// converting string to bytes
-		for (int i = 0; i < sb.length(); i = i + 8) {
-			output[i / 8] = (byte) Integer.parseInt(sb.substring(i, i + 8), 2);
-		}
-
-		FileOutputStream out = new FileOutputStream("encoded.txt");
-		out.write(output);
+		// System.out.println("testing out output");
+		// System.out.println(sb);
 		out.close();
 
-		BufferedWriter bw = new BufferedWriter(new FileWriter(
-				"encoding_table.txt"));
+		BufferedWriter bw = new BufferedWriter(new FileWriter(table_file));
 
 		for (Map.Entry<Character, String> entry : encoding.entrySet()) {
 			bw.write(entry.getKey() + entry.getValue() + DELIMITER);
@@ -166,54 +190,73 @@ public class Huffman {
 		}
 	}
 
-	public static void decode(String filename) throws IOException {
+	public static void decode(String in_file, String table_file, String out_file)
+			throws IOException {
 		HashMap<String, Character> encoding = new HashMap<String, Character>();
-		BufferedReader br = new BufferedReader(new FileReader(
-				"encoding_table.txt"));
-		String table = br.readLine();
-		br.close();
-//		System.out.println("table:" + table);
-//		System.out.println("delimiter:" + DELIMITER);
-		String[] entries = table.split("" + DELIMITER);
-		// add to HashMap
-//		System.out.println("entries:" + entries.length);
-		for (String str : entries) {
-//			System.out.println("str:" + str);
-			encoding.put(str.substring(1), str.charAt(0));
+		BufferedReader br = new BufferedReader(new FileReader(table_file));
+	
+		char[] table = new char[4096];
+		StringBuilder table_str = new StringBuilder();
+		int length;
+		while ((length = br.read(table)) != -1) {
+			for(int i=0; i<length; i++){
+				table_str.append(table[i]);
+			}
 		}
+		//System.out.println("size:"+table_str.length());
+		br.close();
 
-		FileInputStream in = new FileInputStream(filename);
+		//System.out.println("string:"+table_str);
+		String[] entries = table_str.toString().split("" + DELIMITER);
+		//System.out.println("entries:"+entries.length);
+		// add to HashMap
+		for (String str : entries) {
+			encoding.put(str.substring(1), str.charAt(0));
+			System.out.println(encoding.get(str.substring(1)) + "=" + str.substring(1));
+
+		}
+	
+		for (String str : encoding.keySet()){
+			if(encoding.get(str) == EOF){
+				System.out.println("EOF= " + EOF + " = " + str);
+			}
+		}
+		
+		FileInputStream in = new FileInputStream(in_file);
 		byte[] input = new byte[4096];
-		int length = 0;
 		// look up sequence of bits in encoding table to find character
 		StringBuilder binary = new StringBuilder();
-
-		while ((length = in.read(input)) != -1) {
+		StringBuilder sb = new StringBuilder();
+		BufferedWriter bw = new BufferedWriter(new FileWriter(out_file));
+		boolean flag = true;
+		while (flag && (length = in.read(input)) != -1) {
+			//System.out.println("length "+length);
+			binary = new StringBuilder();
 			for (int i = 0; i < length; i++) {
-//				System.out.println("OUTPUT" + (byte) input[i]);
+				// System.out.println("OUTPUT" + (byte) input[i]);
 				binary.append(toBinary((0x000000FF & input[i])));
 			}
-		}
+			//System.out.println("length: "+binary.length());
+			
+			for (int i = 0; i < binary.length(); i++) {
+				sb.append(binary.charAt(i));
+				//System.out.println("sb" + sb);
+				System.out.println("ENCODING. " + encoding.get(sb.toString()) + "=" + sb.toString());
 
-//		System.out.println(binary);
-
-		StringBuilder decoded = new StringBuilder();
-		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < binary.length(); i++) {
-			sb.append(binary.charAt(i));
-//			System.out.println("sb" + sb);
-			if (encoding.containsKey(sb.toString())) {
-				if(encoding.get(sb.toString()).equals(EOF)){
-					break;
+				if (encoding.containsKey(sb.toString())) {
+					if (encoding.get(sb.toString()) == EOF) {
+						System.out.println("gets here");
+						flag = false;
+						break;
+					}
+//					System.out.println("Char: " + encoding.get(sb.toString()).toString());
+					bw.write(encoding.get(sb.toString()).toString());
+					sb = new StringBuilder();
 				}
-				decoded.append(encoding.get(sb.toString()));
-				sb = new StringBuilder();
 			}
 		}
-		in.close();
 
-		BufferedWriter bw = new BufferedWriter(new FileWriter("decoded.txt"));
-		bw.write(decoded.toString());
+		in.close();
 		bw.close();
 	}
 
@@ -221,7 +264,7 @@ public class Huffman {
 		int item = value;
 		StringBuilder str = new StringBuilder();
 		int r;
-		while (str.length() < 8) { 
+		while (str.length() < 8) {
 			r = item % 2;
 			item = (char) (item / 2);
 			str.append(r);
@@ -230,11 +273,32 @@ public class Huffman {
 	}
 
 	public static void main(String[] args) throws IOException {
-		if(args[0].equals("encode")){
-			Huffman.encode(args[1]);
+		long startTime = 0, stopTime = 0;
+		if (args[0].equals("encode")) {
+			if (args.length == 2) {
+				startTime = System.nanoTime();
+				Huffman.encode(args[1], "encoded.txt", "encoding_table.txt");
+				stopTime = System.nanoTime();
+			} else {
+				startTime = System.nanoTime();
+				Huffman.encode(args[1], args[2], args[3]);
+				stopTime = System.nanoTime();
+			}
 		}
-		if(args[0].equals("decode")){
-			Huffman.decode(args[1]);
+
+		if (args[0].equals("decode")) {
+			if (args.length == 2) {
+				startTime = System.nanoTime();
+				Huffman.decode(args[1], "encoding_table.txt", "decoded.txt");
+				stopTime = System.nanoTime();
+			} else {
+				startTime = System.nanoTime();
+				Huffman.decode(args[1], args[2], args[3]);
+				stopTime = System.nanoTime();
+			}
 		}
+
+		double seconds = (double) (stopTime - startTime) / 1000000000.0;
+		System.out.println("Time: " + seconds + " seconds");
 	}
 }
